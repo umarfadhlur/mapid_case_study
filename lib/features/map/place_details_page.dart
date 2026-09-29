@@ -89,16 +89,6 @@ class PlaceDetailsPage extends StatelessWidget {
                     title: 'Periode data',
                     value: feature.period,
                   ),
-
-                  if (enrichment?.imageSourceUrl != null) ...[
-                    const SizedBox(height: 24),
-                    Text('Sumber gambar', style: theme.textTheme.titleSmall),
-                    const SizedBox(height: 6),
-                    SelectableText(
-                      enrichment!.imageSourceUrl!,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
                 ],
               ),
             ),
