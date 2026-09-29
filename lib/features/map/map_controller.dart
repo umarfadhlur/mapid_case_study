@@ -34,18 +34,24 @@ class TourismMapController extends ChangeNotifier {
   bool _isLocating = false;
   bool _isLoadingEnrichment = false;
   bool _enrichmentLoaded = false;
+  bool _isShowingUserLocation = false;
   bool _isDisposed = false;
 
   String? _errorMessage;
 
   bool get isLoading => _isLoading;
+
   bool get isLocating => _isLocating;
 
   bool get isLoadingEnrichment => _isLoadingEnrichment;
 
+  bool get isShowingUserLocation => _isShowingUserLocation;
+
   String? get errorMessage => _errorMessage;
 
   MapFeature? get selectedFeature => _selectedFeature;
+
+  int get featureCount => _features.length;
 
   PlaceDetails? get selectedEnrichment {
     final feature = _selectedFeature;
@@ -54,8 +60,6 @@ class TourismMapController extends ChangeNotifier {
 
     return _enrichmentsById[feature.id];
   }
-
-  int get featureCount => _features.length;
 
   void _notify() {
     if (!_isDisposed) {
@@ -71,15 +75,11 @@ class TourismMapController extends ChangeNotifier {
 
   Future<void> onStyleLoaded() async {
     if (_isDisposed) return;
-
-    // JSON website berjalan paralel. Bila gagal,
-    // titik wisata dari MAPID tetap tampil.
     unawaited(loadEnrichments());
 
     await loadTourismLayer();
 
     if (_isDisposed) return;
-
     await showCurrentLocation(moveCamera: false);
   }
 
@@ -99,12 +99,8 @@ class TourismMapController extends ChangeNotifier {
       _enrichmentsById = result;
       _enrichmentLoaded = true;
 
-      // Bila popup sudah terbuka, foto dan
-      // deskripsi langsung muncul.
       _notify();
     } catch (error) {
-      // Enrichment bersifat opsional: jangan
-      // menggagalkan peta karena website error.
       debugPrint('Gagal memuat enrichment: $error');
     } finally {
       _isLoadingEnrichment = false;
@@ -159,8 +155,6 @@ class TourismMapController extends ChangeNotifier {
             iconAnchor: 'bottom',
             iconAllowOverlap: true,
           ),
-
-          // Pin wisata harus bisa berinteraksi.
           enableInteraction: true,
         );
       }
@@ -229,6 +223,7 @@ class TourismMapController extends ChangeNotifier {
       selectedFeature ??= MapFeature.fromGeoJson(featureJson);
 
       _selectedFeature = selectedFeature;
+      _isShowingUserLocation = false;
       _notify();
 
       await map.animateCamera(
@@ -343,6 +338,13 @@ class TourismMapController extends ChangeNotifier {
             15,
           ),
         );
+
+        if (_isDisposed || _map != map) {
+          return;
+        }
+
+        _isShowingUserLocation = true;
+        _notify();
       }
 
       if (_isDisposed) return;
@@ -357,6 +359,47 @@ class TourismMapController extends ChangeNotifier {
     } finally {
       _isLocating = false;
       _notify();
+    }
+  }
+
+  Future<void> moveToInitialPosition() async {
+    final map = _map;
+
+    if (_isDisposed || map == null) {
+      return;
+    }
+
+    try {
+      await map.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          MapConstants.initialPosition,
+          MapConstants.initialZoom,
+        ),
+      );
+
+      if (_isDisposed || _map != map) {
+        return;
+      }
+
+      _isShowingUserLocation = false;
+      _notify();
+    } catch (error) {
+      if (_isDisposed) return;
+
+      _errorMessage = 'Gagal kembali ke Jogja: $error';
+      _notify();
+    }
+  }
+
+  Future<void> toggleLocationCamera() async {
+    if (_isDisposed || _isLocating) {
+      return;
+    }
+
+    if (_isShowingUserLocation) {
+      await moveToInitialPosition();
+    } else {
+      await showCurrentLocation(moveCamera: true);
     }
   }
 

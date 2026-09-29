@@ -21,9 +21,6 @@ class PlaceDetailsService {
     );
 
     final Object? raw = response.data;
-
-    // Bila hosting mengirim text/plain, Dio mungkin
-    // memberikan String, bukan Map.
     final Object? decoded = raw is String ? jsonDecode(raw) : raw;
 
     if (decoded is! Map) {
@@ -50,8 +47,6 @@ class PlaceDetailsService {
 
         result[place.featureId] = place;
       } on FormatException {
-        // Lewati satu entri rusak tanpa membuat
-        // seluruh katalog gagal dimuat.
         continue;
       }
     }

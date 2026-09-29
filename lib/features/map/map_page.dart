@@ -4,6 +4,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../core/constants/map_constants.dart';
 import '../popup/feature_popup.dart';
 import 'map_controller.dart';
+import 'place_details_page.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -30,7 +31,6 @@ class _MapPageState extends State<MapPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text(MapConstants.layerTitle)),
       body: ListenableBuilder(
         listenable: _controller,
         child: MapLibreMap(
@@ -102,28 +102,56 @@ class _MapPageState extends State<MapPage> {
                   bottom: 16,
                   child: FeaturePopup(
                     feature: _controller.selectedFeature!,
+                    enrichment: _controller.selectedEnrichment,
+                    isLoadingEnrichment: _controller.isLoadingEnrichment,
                     onClose: _controller.clearSelection,
+                    onTap: () {
+                      final feature = _controller.selectedFeature;
+
+                      if (feature == null) return;
+
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (context) => PlaceDetailsPage(
+                            feature: feature,
+                            enrichment: _controller.selectedEnrichment,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
             ],
           );
         },
       ),
-      // floatingActionButton: FloatingActionButton.extended(
-      //   onPressed: _controller.isLocating
-      //       ? null
-      //       : () {
-      //           _controller.showCurrentLocation();
-      //         },
-      //   icon: _controller.isLocating
-      //       ? const SizedBox(
-      //           width: 18,
-      //           height: 18,
-      //           child: CircularProgressIndicator(strokeWidth: 2),
-      //         )
-      //       : const Icon(Icons.my_location),
-      //   label: const Text('Lokasi saya'),
-      // ),
+      floatingActionButton: ListenableBuilder(
+        listenable: _controller,
+        builder: (context, child) {
+          if (_controller.selectedFeature != null) {
+            return const SizedBox.shrink();
+          }
+
+          final isLocating = _controller.isLocating;
+          final showingUser = _controller.isShowingUserLocation;
+
+          return FloatingActionButton.extended(
+            onPressed: isLocating
+                ? null
+                : () {
+                    _controller.toggleLocationCamera();
+                  },
+            icon: isLocating
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(showingUser ? Icons.map_outlined : Icons.my_location),
+            label: Text(showingUser ? 'Kembali' : 'Lokasi saya'),
+          );
+        },
+      ),
     );
   }
 }

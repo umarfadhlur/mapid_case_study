@@ -10,196 +10,179 @@ class FeaturePopup extends StatelessWidget {
     required this.onClose,
     this.enrichment,
     this.isLoadingEnrichment = false,
+    this.onTap,
   });
 
   final MapFeature feature;
   final PlaceDetails? enrichment;
   final bool isLoadingEnrichment;
   final VoidCallback onClose;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.60,
-      ),
-      child: Material(
-        color: colorScheme.surface,
-        elevation: 12,
-        borderRadius: BorderRadius.circular(24),
-        clipBehavior: Clip.antiAlias,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Stack(
-                children: [
-                  _buildImage(colorScheme),
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Material(
-                      color: Colors.black54,
-                      shape: const CircleBorder(),
-                      child: IconButton(
-                        tooltip: 'Tutup detail',
-                        onPressed: onClose,
-                        icon: const Icon(Icons.close, color: Colors.white),
-                      ),
-                    ),
+    return SafeArea(
+      minimum: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Material(
+              color: colorScheme.surface,
+              elevation: 10,
+              borderRadius: BorderRadius.circular(20),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onTap,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(child: _buildSummary(context)),
+                      const SizedBox(width: 12),
+                      _buildThumbnail(colorScheme),
+                    ],
                   ),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      feature.name,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _InfoChip(
-                          icon: Icons.location_city,
-                          label: feature.city,
-                        ),
-                        _InfoChip(
-                          icon: Icons.calendar_month,
-                          label: feature.period,
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 18),
-
-                    if (isLoadingEnrichment && enrichment == null)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 16),
-                        child: Text(
-                          'Memuat informasi '
-                          'tambahan...',
-                        ),
-                      ),
-
-                    if (enrichment?.description.isNotEmpty == true) ...[
-                      Text(
-                        'Tentang tempat ini',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      ..._descriptionParagraphs(enrichment!.description),
-                      const SizedBox(height: 10),
-                    ],
-
-                    _DetailRow(
-                      icon: Icons.location_on_outlined,
-                      label: 'Alamat',
-                      value: feature.address,
-                    ),
-                    const SizedBox(height: 12),
-                    _DetailRow(
-                      icon: Icons.map_outlined,
-                      label: 'Kecamatan',
-                      value: feature.district,
-                    ),
-                    const SizedBox(height: 12),
-                    _DetailRow(
-                      icon: Icons.place_outlined,
-                      label: 'Desa/Kelurahan',
-                      value: feature.village,
-                    ),
-
-                    if (enrichment?.imageSourceUrl != null) ...[
-                      const SizedBox(height: 14),
-                      SelectableText(
-                        'Sumber gambar: '
-                        '${enrichment!.imageSourceUrl}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ],
                 ),
               ),
-            ],
+            ),
+          ),
+
+          Positioned(top: 0, right: -5, child: _buildCloseButton()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummary(BuildContext context) {
+    final theme = Theme.of(context);
+    final address = feature.address.trim();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          feature.name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
           ),
         ),
-      ),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.location_on_outlined,
+              size: 17,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text(
+                address,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            _SmallChip(icon: Icons.location_city, label: feature.city),
+            _SmallChip(icon: Icons.calendar_month, label: feature.period),
+          ],
+        ),
+        if (isLoadingEnrichment && enrichment == null)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+      ],
     );
   }
 
-  List<Widget> _descriptionParagraphs(String description) {
-    final paragraphs = description
-        .split(RegExp(r'\n\s*\n'))
-        .map((text) => text.trim())
-        .where((text) => text.isNotEmpty);
+  Widget _buildThumbnail(ColorScheme colorScheme) {
+    final imageUrl = enrichment?.imageUrl?.trim();
 
-    return [
-      for (final paragraph in paragraphs)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Text(paragraph),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox(
+            width: 92,
+            height: 92,
+            child: imageUrl == null || imageUrl.isEmpty
+                ? _placeholder(colorScheme)
+                : Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) {
+                        return child;
+                      }
+
+                      return _placeholder(colorScheme, loading: true);
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return _placeholder(colorScheme);
+                    },
+                  ),
+          ),
         ),
-    ];
+        const SizedBox(height: 6),
+        _NextChip(icon: Icons.arrow_forward, label: 'Lihat detail'),
+      ],
+    );
   }
 
-  Widget _buildImage(ColorScheme colorScheme) {
-    final url = enrichment?.imageUrl?.trim();
-
-    if (url == null || url.isEmpty) {
-      return _imagePlaceholder(colorScheme);
-    }
-
+  Widget _buildCloseButton() {
     return SizedBox(
-      width: double.infinity,
-      height: 170,
-      child: Image.network(
-        url,
-        fit: BoxFit.cover,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) {
-            return child;
-          }
-
-          return _imagePlaceholder(colorScheme, showLoading: true);
-        },
-        errorBuilder: (context, error, stackTrace) {
-          return _imagePlaceholder(colorScheme);
-        },
+      width: 28,
+      height: 28,
+      child: Material(
+        color: Colors.red,
+        shape: const CircleBorder(),
+        child: IconButton(
+          constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+          padding: EdgeInsets.zero,
+          tooltip: 'Tutup popup',
+          onPressed: onClose,
+          icon: const Icon(Icons.close, size: 15, color: Colors.white),
+        ),
       ),
     );
   }
 
-  Widget _imagePlaceholder(
-    ColorScheme colorScheme, {
-    bool showLoading = false,
-  }) {
+  Widget _placeholder(ColorScheme colorScheme, {bool loading = false}) {
     return Container(
-      width: double.infinity,
-      height: 170,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [colorScheme.primaryContainer, colorScheme.tertiaryContainer],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
+      color: colorScheme.primaryContainer,
       child: Center(
-        child: showLoading
-            ? const CircularProgressIndicator()
+        child: loading
+            ? SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: colorScheme.primary,
+                ),
+              )
             : Icon(
                 Icons.landscape_rounded,
-                size: 64,
+                size: 34,
                 color: colorScheme.primary,
               ),
       ),
@@ -207,51 +190,54 @@ class FeaturePopup extends StatelessWidget {
   }
 }
 
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.icon, required this.label});
+class _SmallChip extends StatelessWidget {
+  const _SmallChip({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
 
   @override
   Widget build(BuildContext context) {
-    return Chip(
-      avatar: Icon(icon, size: 18),
-      label: Text(label),
-      visualDensity: VisualDensity.compact,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13),
+          const SizedBox(width: 4),
+          Text(label, style: Theme.of(context).textTheme.labelSmall),
+        ],
+      ),
     );
   }
 }
 
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
+class _NextChip extends StatelessWidget {
+  const _NextChip({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
-  final String value;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.labelMedium),
-              const SizedBox(height: 2),
-              Text(value),
-            ],
-          ),
-        ),
-      ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(width: 4),
+          Icon(icon, size: 13),
+        ],
+      ),
     );
   }
 }

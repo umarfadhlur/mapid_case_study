@@ -50,8 +50,6 @@ class MapidService {
       try {
         features.add(MapFeature.fromGeoJson(Map<String, dynamic>.from(item)));
       } on FormatException {
-        // Lewati feature yang geometry-nya
-        // kosong/tidak valid.
         continue;
       }
     }
