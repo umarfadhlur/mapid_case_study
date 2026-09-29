@@ -1,30 +1,34 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:mapid_case_study/main.dart';
+import 'package:mapid_case_study/data/models/map_feature.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Menampilkan nama tempat wisata dari GeoJSON', (
+    WidgetTester tester,
+  ) async {
+    final feature = MapFeature.fromGeoJson({
+      'id': 'taman-vredeburg',
+      'type': 'Feature',
+      'geometry': {
+        'type': 'Point',
+        'coordinates': [110.3652949, -7.8006346],
+      },
+      'properties': {
+        'NAMA': 'TAMAN VREDEBURG',
+        'ALAMAT': 'JL. MARGO MULYO NO.6',
+        'KECAMATAN': 'GONDOMANAN',
+        'WAKTU': 'Q2 2024',
+      },
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: Text(feature.name))),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    expect(find.text('TAMAN VREDEBURG'), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(feature.position.latitude, closeTo(-7.8006346, 0.0000001));
+
+    expect(feature.position.longitude, closeTo(110.3652949, 0.0000001));
   });
 }

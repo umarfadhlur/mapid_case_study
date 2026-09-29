@@ -1,63 +1,134 @@
+import 'dart:async';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../core/constants/map_constants.dart';
 import '../../data/models/map_feature.dart';
+import '../../data/models/place_details.dart';
 import '../../data/services/mapid_service.dart';
+import '../../data/services/place_details_service.dart';
 
 class TourismMapController extends ChangeNotifier {
-  TourismMapController({MapidService? service})
-    : _service = service ?? MapidService();
+  TourismMapController({
+    MapidService? service,
+    PlaceDetailsService? enrichmentService,
+  }) : _service = service ?? MapidService(),
+       _enrichmentService = enrichmentService ?? PlaceDetailsService();
 
   final MapidService _service;
+  final PlaceDetailsService _enrichmentService;
 
   MapLibreMapController? _map;
 
   List<MapFeature> _features = [];
   MapFeature? _selectedFeature;
 
+  Map<String, PlaceDetails> _enrichmentsById = {};
+
   bool _isLoading = false;
   bool _isLocating = false;
+  bool _isLoadingEnrichment = false;
+  bool _enrichmentLoaded = false;
+  bool _isDisposed = false;
 
   String? _errorMessage;
 
   bool get isLoading => _isLoading;
-
   bool get isLocating => _isLocating;
+
+  bool get isLoadingEnrichment => _isLoadingEnrichment;
 
   String? get errorMessage => _errorMessage;
 
   MapFeature? get selectedFeature => _selectedFeature;
 
+  PlaceDetails? get selectedEnrichment {
+    final feature = _selectedFeature;
+
+    if (feature == null) return null;
+
+    return _enrichmentsById[feature.id];
+  }
+
   int get featureCount => _features.length;
 
+  void _notify() {
+    if (!_isDisposed) {
+      notifyListeners();
+    }
+  }
+
   void attachMap(MapLibreMapController controller) {
+    if (_isDisposed) return;
+
     _map = controller;
   }
 
   Future<void> onStyleLoaded() async {
+    if (_isDisposed) return;
+
+    // JSON website berjalan paralel. Bila gagal,
+    // titik wisata dari MAPID tetap tampil.
+    unawaited(loadEnrichments());
+
     await loadTourismLayer();
 
-    // GPS tetap dicoba walaupun request
-    // layer wisata mengalami error.
+    if (_isDisposed) return;
+
     await showCurrentLocation(moveCamera: false);
+  }
+
+  Future<void> loadEnrichments() async {
+    if (_isDisposed || _enrichmentLoaded || _isLoadingEnrichment) {
+      return;
+    }
+
+    _isLoadingEnrichment = true;
+    _notify();
+
+    try {
+      final result = await _enrichmentService.getEnrichments();
+
+      if (_isDisposed) return;
+
+      _enrichmentsById = result;
+      _enrichmentLoaded = true;
+
+      // Bila popup sudah terbuka, foto dan
+      // deskripsi langsung muncul.
+      _notify();
+    } catch (error) {
+      // Enrichment bersifat opsional: jangan
+      // menggagalkan peta karena website error.
+      debugPrint('Gagal memuat enrichment: $error');
+    } finally {
+      _isLoadingEnrichment = false;
+      _notify();
+    }
   }
 
   Future<void> loadTourismLayer() async {
     final map = _map;
-    if (map == null) return;
+
+    if (_isDisposed || map == null) {
+      return;
+    }
 
     _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+    _notify();
 
     try {
       final features = await _service.getTourismFeatures();
 
-      if (_map != map) return;
+      if (_isDisposed || _map != map) {
+        return;
+      }
 
       final geoJson = {
         'type': 'FeatureCollection',
@@ -71,38 +142,62 @@ class TourismMapController extends ChangeNotifier {
       } else {
         await map.addGeoJsonSource(MapConstants.tourismSourceId, geoJson);
 
-        await map.addCircleLayer(
+        final pinBytes = await _iconToPng(Icons.location_on, Colors.red);
+
+        if (_isDisposed || _map != map) {
+          return;
+        }
+
+        await map.addImage('tourism-pin-image', pinBytes);
+
+        await map.addSymbolLayer(
           MapConstants.tourismSourceId,
           MapConstants.tourismLayerId,
-          const CircleLayerProperties(
-            circleColor: '#E65100',
-            circleRadius: 9,
-            circleStrokeColor: '#FFFFFF',
-            circleStrokeWidth: 2,
+          const SymbolLayerProperties(
+            iconImage: 'tourism-pin-image',
+            iconSize: 1,
+            iconAnchor: 'bottom',
+            iconAllowOverlap: true,
           ),
+
+          // Pin wisata harus bisa berinteraksi.
+          enableInteraction: true,
         );
+      }
+
+      if (_isDisposed || _map != map) {
+        return;
       }
 
       _features = features;
       _errorMessage = null;
-      notifyListeners();
+      _notify();
     } catch (error) {
+      if (_isDisposed) return;
+
       _errorMessage = 'Gagal memuat layer: $error';
-      notifyListeners();
+      _notify();
     } finally {
       _isLoading = false;
-      notifyListeners();
+      _notify();
     }
   }
 
   Future<void> onMapClick(Point<double> point, LatLng coordinates) async {
     final map = _map;
-    if (map == null) return;
+
+    if (_isDisposed || map == null) {
+      return;
+    }
 
     try {
       final renderedFeatures = await map.queryRenderedFeatures(point, [
         MapConstants.tourismLayerId,
       ], null);
+
+      if (_isDisposed || _map != map) {
+        return;
+      }
 
       if (renderedFeatures.isEmpty) {
         clearSelection();
@@ -120,25 +215,30 @@ class TourismMapController extends ChangeNotifier {
 
       final tappedId = featureJson['id']?.toString();
 
+      MapFeature? selectedFeature;
+
       if (tappedId != null) {
         for (final feature in _features) {
           if (feature.id == tappedId) {
-            _selectedFeature = feature;
-            notifyListeners();
-            return;
+            selectedFeature = feature;
+            break;
           }
         }
       }
 
-      // Fallback: jika platform tidak
-      // menyertakan feature ID, parse
-      // feature hasil hit test.
-      _selectedFeature = MapFeature.fromGeoJson(featureJson);
+      selectedFeature ??= MapFeature.fromGeoJson(featureJson);
 
-      notifyListeners();
+      _selectedFeature = selectedFeature;
+      _notify();
+
+      await map.animateCamera(
+        CameraUpdate.newLatLngZoom(selectedFeature.position, 15),
+      );
     } catch (error) {
+      if (_isDisposed) return;
+
       _errorMessage = 'Gagal membaca titik: $error';
-      notifyListeners();
+      _notify();
     }
   }
 
@@ -148,7 +248,7 @@ class TourismMapController extends ChangeNotifier {
     }
 
     _selectedFeature = null;
-    notifyListeners();
+    _notify();
   }
 
   void clearError() {
@@ -157,17 +257,18 @@ class TourismMapController extends ChangeNotifier {
     }
 
     _errorMessage = null;
-    notifyListeners();
+    _notify();
   }
 
   Future<void> showCurrentLocation({bool moveCamera = true}) async {
     final map = _map;
-    if (map == null || _isLocating) {
+
+    if (_isDisposed || map == null || _isLocating) {
       return;
     }
 
     _isLocating = true;
-    notifyListeners();
+    _notify();
 
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -187,11 +288,11 @@ class TourismMapController extends ChangeNotifier {
         throw StateError('Izin lokasi belum diberikan.');
       }
 
-      final position = await Geolocator.getCurrentPosition(
-        timeLimit: const Duration(seconds: 20),
-      );
+      final position = await Geolocator.getCurrentPosition();
 
-      if (_map != map) return;
+      if (_isDisposed || _map != map) {
+        return;
+      }
 
       final geoJson = {
         'type': 'FeatureCollection',
@@ -214,14 +315,22 @@ class TourismMapController extends ChangeNotifier {
       } else {
         await map.addGeoJsonSource(MapConstants.userSourceId, geoJson);
 
-        await map.addCircleLayer(
+        final pinBytes = await _iconToPng(Icons.location_on, Colors.blue);
+
+        if (_isDisposed || _map != map) {
+          return;
+        }
+
+        await map.addImage('user-location-pin-image', pinBytes);
+
+        await map.addSymbolLayer(
           MapConstants.userSourceId,
           MapConstants.userLayerId,
-          const CircleLayerProperties(
-            circleColor: '#1976D2',
-            circleRadius: 10,
-            circleStrokeColor: '#FFFFFF',
-            circleStrokeWidth: 3,
+          const SymbolLayerProperties(
+            iconImage: 'user-location-pin-image',
+            iconSize: 1,
+            iconAnchor: 'bottom',
+            iconAllowOverlap: true,
           ),
           enableInteraction: false,
         );
@@ -236,21 +345,85 @@ class TourismMapController extends ChangeNotifier {
         );
       }
 
+      if (_isDisposed) return;
+
       _errorMessage = null;
-      notifyListeners();
+      _notify();
     } catch (error) {
-      _errorMessage =
-          'Lokasi tidak tersedia: '
-          '$error';
-      notifyListeners();
+      if (_isDisposed) return;
+
+      _errorMessage = 'Lokasi tidak tersedia: $error';
+      _notify();
     } finally {
       _isLocating = false;
-      notifyListeners();
+      _notify();
+    }
+  }
+
+  Future<Uint8List> _iconToPng(IconData icon, Color color) async {
+    const canvasSize = 96.0;
+    const iconSize = 88.0;
+
+    final recorder = ui.PictureRecorder();
+
+    final canvas = Canvas(recorder);
+
+    final painter = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(icon.codePoint),
+        style: TextStyle(
+          fontFamily: icon.fontFamily ?? 'MaterialIcons',
+          package: icon.fontPackage,
+          fontSize: iconSize,
+          color: color,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+
+    try {
+      painter.layout();
+
+      painter.paint(
+        canvas,
+        Offset(
+          (canvasSize - painter.width) / 2,
+          (canvasSize - painter.height) / 2,
+        ),
+      );
+
+      final picture = recorder.endRecording();
+
+      try {
+        final image = await picture.toImage(
+          canvasSize.toInt(),
+          canvasSize.toInt(),
+        );
+
+        try {
+          final byteData = await image.toByteData(
+            format: ui.ImageByteFormat.png,
+          );
+
+          if (byteData == null) {
+            throw StateError('Gagal membuat gambar pin.');
+          }
+
+          return byteData.buffer.asUint8List();
+        } finally {
+          image.dispose();
+        }
+      } finally {
+        picture.dispose();
+      }
+    } finally {
+      painter.dispose();
     }
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
     _map = null;
     super.dispose();
   }

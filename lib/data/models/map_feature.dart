@@ -13,7 +13,14 @@ class MapFeature {
   final double longitude;
   final Map<String, dynamic> properties;
 
-  String get name => _text('NAMA', fallback: 'Tempat wisata');
+  String get name {
+    final rawName = _text('NAMA', fallback: 'Tempat wisata');
+    final cleaned = rawName.replaceAllMapped(RegExp(r'\s*\([^)]*\)'), (match) {
+      final part = match.group(0) ?? '';
+      return RegExp(r'[ʦʧ�]').hasMatch(part) ? '' : part;
+    });
+    return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
 
   String get address => _text('ALAMAT');
 

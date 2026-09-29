@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '../../core/constants/map_constants.dart';
-import '../../data/models/map_feature.dart';
+import '../popup/feature_popup.dart';
 import 'map_controller.dart';
 
 class MapPage extends StatefulWidget {
@@ -33,9 +33,6 @@ class _MapPageState extends State<MapPage> {
       appBar: AppBar(title: const Text(MapConstants.layerTitle)),
       body: ListenableBuilder(
         listenable: _controller,
-
-        // Map tidak perlu dibuat ulang setiap loading,
-        // error, atau selected feature berubah.
         child: MapLibreMap(
           styleString: MapConstants.styleUrl,
           initialCameraPosition: const CameraPosition(
@@ -103,62 +100,30 @@ class _MapPageState extends State<MapPage> {
                   left: 16,
                   right: 16,
                   bottom: 16,
-                  child: _buildFeaturePopup(_controller.selectedFeature!),
+                  child: FeaturePopup(
+                    feature: _controller.selectedFeature!,
+                    onClose: _controller.clearSelection,
+                  ),
                 ),
             ],
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _controller.isLocating
-            ? null
-            : () {
-                _controller.showCurrentLocation();
-              },
-        icon: _controller.isLocating
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.my_location),
-        label: const Text('Lokasi saya'),
-      ),
-    );
-  }
-
-  Widget _buildFeaturePopup(MapFeature feature) {
-    return Card(
-      elevation: 8,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    feature.name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                IconButton(
-                  onPressed: _controller.clearSelection,
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('Alamat: ${feature.address}'),
-            const SizedBox(height: 6),
-            Text('Kecamatan: ${feature.district}'),
-            const SizedBox(height: 6),
-            Text('Waktu: ${feature.period}'),
-          ],
-        ),
-      ),
+      // floatingActionButton: FloatingActionButton.extended(
+      //   onPressed: _controller.isLocating
+      //       ? null
+      //       : () {
+      //           _controller.showCurrentLocation();
+      //         },
+      //   icon: _controller.isLocating
+      //       ? const SizedBox(
+      //           width: 18,
+      //           height: 18,
+      //           child: CircularProgressIndicator(strokeWidth: 2),
+      //         )
+      //       : const Icon(Icons.my_location),
+      //   label: const Text('Lokasi saya'),
+      // ),
     );
   }
 }
